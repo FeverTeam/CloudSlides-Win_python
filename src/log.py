@@ -1,7 +1,5 @@
-# -*- coding: UTF-8 -*-
+﻿# -*- coding: UTF-8 -*-
 
-from boto.s3.connection import S3Connection
-from boto.s3.key import Key
 
 import config as conf
 
