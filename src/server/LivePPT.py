@@ -10,7 +10,7 @@ from __future__ import with_statement
 #导入
 import config as conf
 import log  
-import path_utils as p
+import path_utils as pth
 import redis
 import mgfs
 
@@ -37,7 +37,7 @@ def main():
         for c in dir(PO.constants): g[c] = getattr(PO.constants, c)
 
         #检测文件的根目录是否存在
-        base_path = p.gen_base_path()
+        base_path = pth.gen_base_path()
         if os.path.isdir(base_path): 
             pass 
         else: 
@@ -67,18 +67,20 @@ def main():
                 logger.info('No message in 30 sec......')
                 continue
             
-            ppt_id = msg[1]
-            logger.info('Get convert job pptid = %s' %(ppt_id))
+            ppt_grid_id = eval(msg[1])['pptId']
+            logger.info('Get convert job pptid = %s' %(ppt_grid_id))
                 
             #准备路径参数
-            ppt_path = p.gen_ppt_path(ppt_id) #PPT存放位置
-            save_dir_path = p.gen_save_dir_path(ppt_id) #保存转换后图片的文件夹路径
+            ppt_path = pth.gen_ppt_path(ppt_grid_id) #PPT存放位置
+            save_dir_path = pth.gen_save_dir_path(ppt_grid_id) #保存转换后图片的文件夹路径
                 
             #从Gridfs获取ppt文件
             try:
                 with open(ppt_path, "wb") as ppt_file:
-                    data = gfs.getPPT(ppt_id)
-                    ppt_file.write(data)
+                    ppt_file_cache = gfs.getPPT(ppt_grid_id)
+                    ppt_file.write(ppt_file_cache.read())
+                    #data = gfs.getPPT(ppt_id)
+                    #ppt_file.write(data)
             except Exception , e :
                 print e
 
@@ -95,14 +97,16 @@ def main():
             img_file_name_list = os.listdir(save_dir_path)
             ppt_count = len(img_file_name_list)
             print 'ppt_page_count'+str(ppt_count)
+	    img_id_list = []
             for index in range(1, ppt_count+1):
-                img_path = p.gen_single_png_path(ppt_id, index) #单个PNG文件路径
-                img_key = ppt_id + "p"+ str(index)
+                img_path = pth.gen_single_png_path(ppt_grid_id, index) #单个PNG文件路径
+                img_key = ppt_grid_id + "p"+ str(index)
 
                 #上传单个文件
                 try:
                     with open(img_path, "rb") as img_file:
-                        gfs.putImg( image_fd = img_file, img_id = img_key, img_format = 'jpg' )
+                        img_grid_id = gfs.putImg( image_fd = img_file, img_id = img_key)
+			img_id_list.add(img_grid_id)
                         logger.info( "uploaded image[%s] complete" %( img_path ) )
                 finally:
                     #顺手清理图片文件
@@ -111,8 +115,8 @@ def main():
             #组装准备发到RedisMQ
             mqmsg = {}
             mqmsg['isSuccess'] = True
-            mqmsg['storeKey'] = ppt_id
-            mqmsg['pageCount'] = ppt_count
+	    mqmsg['pptId'] = ppt_grid_id
+            mqmsg['imgIdList'] = img_id_list
             redis_client.lpush(conf.PPT_CONVERT_RESPMQ, mqmsg)
                 
     except Exception as e :

@@ -15,27 +15,21 @@ def uploadPPT(ppt_id, ppt_type, file):
         con = pymongo.Connection(conf.MONGO_SVRIP, conf.MONGO_SVRPORT)
         gfs = gridfs.GridFS(con[conf.MONGO_PPTDB])
         
-        #先删除同名的其他文件
-        #for grid_out in gfs.find({"filename": ppt_id}, timeout=False):
-         #       print grid_out["_id"]
-          #      gfs.delete(grid_out["_id"])
-                
         result = gfs.put(file.read(), filename = ppt_id, contentType = ppt_type)
         print result
 
 def getImage(image_id):
         con = pymongo.Connection(conf.MONGO_SVRIP, conf.MONGO_SVRPORT)
         gfs = gridfs.GridFS(con[conf.MONGO_IMGDB])
-        data = None
-      
-        for grid_out in gfs.find({"filename": image_id}, timeout=False).sort('uploadData', -1).limit(1):
-                data = grid_out
+	data = gfs.get(image_id):
         return data
 
 #对 RedisMQ发送任务
 def sendJob(ppt_id):
         client = redis.Redis(conf.REDIS_SVRIP, conf.REDIS_SVRPORT)
-        result = client.lpush(conf.PPT_CONVERT_REQMQ, ppt_id)
+	msg = {}
+	msg['pptId'] = ppt_id
+        result = client.lpush(conf.PPT_CONVERT_REQMQ, msg)
         print result
 
 def waitForComplete():
@@ -50,27 +44,29 @@ def waitForComplete():
 
 def main():
         
-        #上传PPT并且递交任务
-        ppt_name = 'test.pptx'
-        ppt_id = 'b1'
+        #1.上传PPT并且递交任务, 以上传在GridFS时获得的_id为准
+        ppt_name = '1.pptx'
+        ppt_id = None
+	ppt_name = os.path.splitext(ppt_name)[0]
         ppt_type = os.path.splitext(ppt_name)[1]
         with open(ppt_name, "rb") as ppt_file:
-                uploadPPT(ppt_id, ppt_type, ppt_file)
+                ppt_id = uploadPPT(ppt_name, ppt_type, ppt_file)
+
+	#2.发送任务 
         sendJob(ppt_id)
         
         
-        #获取完成的消息
+        #3.获取完成的消息
         complete_message = waitForComplete()
-        print complete_message
+	print "Got message: " complete_message
         
-        #把图片抓回到本地
-        ppt_count = eval(complete_message)['pageCount']
-        for index in range (1, ppt_count + 1):       
-                image_name = "%sp%d" %(ppt_id, index)
-                data = getImage(image_name)
-                with open("%s.jpg" %(image_name), "wb") as img_file:
-                        img_file.write( data.read() )
-                        print "Got Image %s" %(image_name)
+        #4.把图片抓回到本地
+        img_id_list = eval(complete_message)['imgIdList']
+        for img_id in img_id_list:
+		img_file_cache = getImage(img_id)
+                with open("%s.jpg" %(img_id), "wb") as img_file:
+                        img_file.write( img_file_cache.read() )
+                        print "Got Image %s" %(img_id)
 
 if __name__ == '__main__':
         main()
