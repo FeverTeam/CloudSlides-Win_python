@@ -1,4 +1,4 @@
-﻿# -*- coding: UTF-8 -*-
+# -*- coding: UTF-8 -*-
 
 
 import config as conf
@@ -8,8 +8,10 @@ import logging
 def gen_logger():
     # 创建一个logger  
     logger = logging.getLogger('liveppt')  
-    logger.setLevel(logging.DEBUG)  
-      
+    logger.setLevel(logging.DEBUG)
+    
+    if len( logger.handlers ) <> 0:
+        return logger
     # 创建一个handler，用于写入日志文件  
     fh = logging.FileHandler('test.log')  
     fh.setLevel(logging.DEBUG)  
